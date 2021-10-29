@@ -1,7 +1,8 @@
 import pathlib
+import re
 import shlex
 import subprocess
-from typing import Dict, List, Optional, Pattern, Tuple
+from typing import Optional, TypedDict
 
 from subtitle_utils import (
     get_video_by_ep_collection_with_glob_n_pattern,
@@ -12,11 +13,10 @@ from subtitle_utils import (
 
 
 def extract_subtitles(
-    origin_video_collection: Tuple[pathlib.Path, ...],
-    sub_track_by_lang_collection: Dict[str, Optional[int]],
-    sub_format_collection: Tuple[str, ...],
-    target_video_by_ep_collection: Optional[Dict[str, pathlib.Path]] = None,
-    origin_video_ep_pattern: Pattern[str] = simple_ep_pattern,
+    origin_video_collection: tuple[pathlib.Path, ...],
+    sub_track_by_lang_collection: dict[int, str],
+    target_video_by_ep_collection: Optional[dict[str, pathlib.Path]] = None,
+    origin_video_ep_pattern: re.Pattern[str] = simple_ep_pattern,
 ) -> None:
     def _get_sub_stem() -> str:
         if target_video_by_ep_collection:
@@ -25,7 +25,7 @@ def extract_subtitles(
                 return target_video_by_ep_collection[m[1]].stem
         return origin_video.stem
 
-    pending_subtitle_extraction: List[Tuple[str, ...]] = []
+    pending_subtitle_extraction: list[tuple[str, ...]] = []
     for origin_video in origin_video_collection:
         for sub_lang, sub_track in sub_track_by_lang_collection.items():
             if sub_track is None:
@@ -50,10 +50,10 @@ def extract_subtitles(
             subprocess.run(cmd)
 
 
-def extract_fonts(video_collection: Tuple[pathlib.Path, ...]) -> None:
+def extract_fonts(video_collection: tuple[pathlib.Path, ...]) -> None:
     if not video_collection:
         return
-    pending_font_extraction: List[Tuple[str, ...]] = []
+    pending_font_extraction: list[tuple[str, ...]] = []
     font_dir = None
     for video in video_collection:
         if font_dir is None:
