@@ -3,7 +3,7 @@ import re
 from typing import List, Pattern, Tuple
 
 from subtitle_utils import (
-    get_video_by_ep_collection_with_glob_n_pattern,
+    get_video_by_ep_collection_with_glob_and_pattern,
     print_video_by_ep_collection,
     prompt_for_user_confirmation,
     simple_ep_pattern,
@@ -49,7 +49,7 @@ if __name__ == "__main__":
     # sub_ep_pattern = re.compile(r".*\s(\d{2})\..*")
     # sub_ep_pattern = re.compile(r".*第(\d{2})話.*")
 
-    video_by_ep_collection = get_video_by_ep_collection_with_glob_n_pattern(
+    video_by_ep_collection = get_video_by_ep_collection_with_glob_and_pattern(
         video_glob, video_ep_pattern
     )
     print_video_by_ep_collection(video_by_ep_collection)

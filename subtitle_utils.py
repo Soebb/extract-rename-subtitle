@@ -9,12 +9,12 @@ def format_video_by_ep_collection_with_pattern(
     video_collection: tuple[pathlib.Path, ...],
     video_ep_pattern: re.Pattern[str] = simple_ep_pattern,
 ) -> dict[str, pathlib.Path]:
-    video_stem_by_ep_collection: dict[str, pathlib.Path] = {}
-    for video_file in video_collection:
-        m = video_ep_pattern.match(video_file.stem)
+    video_by_ep_collection: dict[str, pathlib.Path] = {}
+    for video in video_collection:
+        m = video_ep_pattern.match(video.stem)
         if m:
-            video_stem_by_ep_collection[m[1]] = video_file
-    return video_stem_by_ep_collection
+            video_by_ep_collection[m[1]] = video
+    return video_by_ep_collection
 
 
 def print_video_by_ep_collection(
