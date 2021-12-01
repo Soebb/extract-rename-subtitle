@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import pathlib
 import re
 from typing import List, Pattern, Tuple
