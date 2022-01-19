@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import json
 import pathlib
 import re
 import shlex
@@ -30,6 +31,20 @@ def extract_subtitles(
     target_video_by_ep_collection: Optional[dict[str, pathlib.Path]] = None,
     origin_video_ep_pattern: re.Pattern[str] = simple_ep_pattern,
 ) -> None:
+    def _get_video_info() -> Any:
+        cmd = (
+            "ffprobe",
+            "-loglevel",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_streams",
+            "-select_streams",
+            "s",
+            origin_video,
+        )
+        return json.loads(subprocess.run(cmd).stdout)
+
     def _get_sub_stem() -> str:
         if target_video_by_ep_collection:
             m = origin_video_ep_pattern.match(origin_video.stem)
@@ -37,40 +52,49 @@ def extract_subtitles(
                 return target_video_by_ep_collection[m[1]].stem
         return origin_video.stem
 
+    def _get_sub_format() -> str:
+        codec_name = video_info["streams"][sub_track]["codec_name"]
+        if codec_name == "subrip":
+            return "srt"
+        if codec_name == "ass":
+            return "ass"
+        raise ValueError()
+
     pending_subtitle_extraction: list[tuple[str, ...]] = []
     for origin_video in origin_video_collection:
-        for sub_lang, sub_track in sub_track_by_lang_collection.items():
-            if sub_track is None:
-                continue
-            for sub_format in sub_format_collection:
-                sub_name = f"{_get_sub_stem()}.{sub_lang}.{sub_format}"
-                cmd = (
-                    "ffmpeg",
-                    "-n",
-                    "-i",
-                    str(origin_video),
-                    "-map",
-                    f":{sub_track}",
-                    "-c",
-                    "copy",
-                    sub_name,
-                )
-                print(shlex.join(cmd))
-                pending_subtitle_extraction.append(cmd)
+        video_info = _get_video_info()
+        for sub_track, sub_lang in sub_lang_by_track_collection.items():
+            sub_name = f"{_get_sub_stem()}.{sub_lang}.{_get_sub_format()}"
+            cmd = (
+                "ffmpeg",
+                "-i",  # input
+                str(
+                    origin_video
+                ),  # shlex.join only accept str, or we can use pathlike object directly here.
+                "-n",  # no, do not overwrite output files
+                "-codec",
+                "copy",
+                "-map",
+                f":{sub_track}",  # copy only this sub_track from input file
+                sub_name,
+            )
+            print(shlex.join(cmd))
+            pending_subtitle_extraction.append(cmd)
     if prompt_for_user_confirmation("Start subtitle extraction?"):
         for cmd in pending_subtitle_extraction:
             subprocess.run(cmd)
 
 
-def extract_fonts(video_collection: tuple[pathlib.Path, ...]) -> None:
+def extract_fonts(
+    video_collection: tuple[pathlib.Path, ...], font_dir: Optional[pathlib.Path] = None
+) -> None:
     if not video_collection:
         return
     pending_font_extraction: list[tuple[str, ...]] = []
-    font_dir = None
     for video in video_collection:
         if font_dir is None:
-            font_dir = video.with_name(f"fonts-{video.stem}")
-        # When extracting we will change to another working directory for ffmpeg to put all attachment into one folder. So we have to resolve the absolute path here.
+            font_dir = video.with_name("fonts")
+        # When extracting we will run ffmpeg under another working directory to put all attachment into that folder. So we have to resolve the absolute path here.
         cmd = (
             "ffmpeg",
             "-dump_attachment:t",
@@ -106,7 +130,7 @@ if __name__ == "__main__":
         default=pathlib.Path(),
         help='The directory containing source videos and "subtitle-utils-patterns.json", also the place to put extracted subtitles. (Default: current working directory)',
     )
-    args = parser.parse_args()
+    cli_args = parser.parse_args()
 
     # Read metadata
     metadata: ExtractionMetadata = {
@@ -121,7 +145,7 @@ if __name__ == "__main__":
     extraction_args: dict[str, Any] = {}
     try:
         origin_video_collection = get_video_collection_with_glob(
-            metadata["origin_video_glob"], args.video_directory
+            metadata["origin_video_glob"], cli_args.video_directory
         )
         extraction_args["origin_video_collection"] = origin_video_collection
         extraction_args["sub_lang_by_track_collection"] = metadata[
@@ -143,7 +167,9 @@ if __name__ == "__main__":
         extraction_args[
             "target_video_by_ep_collection"
         ] = get_video_by_ep_collection_with_glob_and_pattern(
-            metadata["target_video_glob"], target_video_ep_pattern
+            metadata["target_video_glob"],
+            target_video_ep_pattern,
+            cli_args.video_directory,
         )
         extraction_args["origin_video_ep_pattern"] = origin_video_collection
     extract_subtitles(**extraction_args)
