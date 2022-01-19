@@ -94,13 +94,14 @@ def extract_fonts(
     for video in video_collection:
         if font_dir is None:
             font_dir = video.with_name("fonts")
-        # When extracting we will run ffmpeg under another working directory to put all attachment into that folder. So we have to resolve the absolute path here.
+        # When extracting we will run ffmpeg under another working directory to put all attachments into it.
+        #  So we have to resolve the absolute path now.
         cmd = (
             "ffmpeg",
-            "-dump_attachment:t",
-            "",
-            "-n",
-            "-i",
+            "-dump_attachment:t",  # dump all attachments
+            "",  # with name guessed from attachments' filename field
+            "-n",  # do not overwrite
+            "-i",  # input file url follows
             str(video.resolve()),
         )
         print(shlex.join(cmd))
@@ -108,7 +109,9 @@ def extract_fonts(
     assert isinstance(font_dir, pathlib.Path)
     if prompt_for_user_confirmation(f'Extract font to folder "{font_dir}?"'):
         if not font_dir.is_dir():
-            font_dir.mkdir()  # This might raise a FileExistsError by design.
+            font_dir.mkdir(
+                755, True, True
+            )  # This might raise a FileExistsError by design.
             # User should then take care of the existing file and re-run the script.
         for cmd in pending_font_extraction:
             subprocess.run(cmd, cwd=font_dir)
