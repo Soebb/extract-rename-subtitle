@@ -7,6 +7,7 @@ import subprocess
 from typing import Any, Optional, TypedDict
 
 from subtitle_utils import (
+    extract_sub_lang_by_track_collection_with_video_sub_info,
     get_video_by_ep_collection_with_glob_and_pattern,
     get_video_collection_with_glob,
     get_video_sub_info,
@@ -27,7 +28,7 @@ class ExtractionMetadata(TypedDict, total=False):
 
 def extract_subtitles(
     origin_video_collection: tuple[pathlib.Path, ...],
-    sub_lang_by_track_collection: dict[int, str],
+    sub_lang_by_track_collection: Optional[dict[int, str]] = None,
     target_video_by_ep_collection: Optional[dict[str, pathlib.Path]] = None,
     origin_video_ep_pattern: re.Pattern[str] = simple_ep_pattern,
 ) -> None:
@@ -47,14 +48,17 @@ def extract_subtitles(
         return origin_video
 
     def _get_sub_format() -> str:
-        codec_name = video_info["streams"][sub_track]["codec_name"]
+        codec_name = video_sub_info["streams"][sub_index]["codec_name"]
         return {"subrip": "srt", "ass": "ass"}[codec_name]
 
     pending_subtitle_extraction: list[tuple[str, ...]] = []
     for origin_video in origin_video_collection:
-        video_info = get_video_sub_info(origin_video)
-        # TODO: auto sub lang detection and extraction
-        for sub_track, sub_lang in sub_lang_by_track_collection.items():
+        video_sub_info = get_video_sub_info(origin_video)
+        if sub_lang_by_track_collection is None:
+            sub_lang_by_track_collection = (
+                extract_sub_lang_by_track_collection_with_video_sub_info(video_sub_info)
+            )
+        for sub_index, sub_lang in sub_lang_by_track_collection.items():
             sub_path = _get_target_video().with_suffix(
                 f".{sub_lang}.{_get_sub_format()}"
             )
@@ -70,7 +74,7 @@ def extract_subtitles(
                 "-codec",
                 "copy",
                 "-map",
-                f"0:s:{sub_track}",  # copy this sub_track from the input file
+                f"0:s:{sub_index}",  # copy this sub_track from the input file
                 str(sub_path),
             )
             print(shlex.join(cmd))

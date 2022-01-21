@@ -67,3 +67,15 @@ def get_video_sub_info(video: pathlib.Path) -> Any:
         video,
     )
     return json.loads(subprocess.run(cmd, capture_output=True).stdout)
+
+
+def extract_sub_lang_by_track_collection_with_video_sub_info(
+    video_sub_info: Any,
+) -> dict[int, str]:
+    """detect all subtitle's track index and languages from the video sub info"""
+    return dict(
+        enumerate(
+            f'{sub_info["tags"]["language"]}-{sub_info["tags"]["title"]}'
+            for sub_info in video_sub_info["streams"]
+        )
+    )
