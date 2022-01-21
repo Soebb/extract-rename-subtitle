@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 
 import itertools
+import json
 import pathlib
 import re
+import subprocess
+from typing import Any
 
 simple_ep_pattern = re.compile(r".*\s(\d{2})\s.*")
 
@@ -48,3 +51,19 @@ def get_video_by_ep_collection_with_glob_and_pattern(
 def prompt_for_user_confirmation(request_text: str) -> bool:
     user_input = input(request_text + " [Y/n] ")
     return user_input.lower() in ("", "y")
+
+
+def get_video_sub_info(video: pathlib.Path) -> Any:
+    """extract all subtitle info from the video with ffprobe"""
+    cmd = (
+        "ffprobe",
+        "-loglevel",
+        "quiet",
+        "-print_format",
+        "json",
+        "-show_streams",
+        "-select_streams",
+        "s",
+        video,
+    )
+    return json.loads(subprocess.run(cmd, capture_output=True).stdout)

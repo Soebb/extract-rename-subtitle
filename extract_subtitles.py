@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import json
 import pathlib
 import re
 import shlex
@@ -10,6 +9,7 @@ from typing import Any, Optional, TypedDict
 from subtitle_utils import (
     get_video_by_ep_collection_with_glob_and_pattern,
     get_video_collection_with_glob,
+    get_video_sub_info,
     prompt_for_user_confirmation,
     simple_ep_pattern,
 )
@@ -31,52 +31,47 @@ def extract_subtitles(
     target_video_by_ep_collection: Optional[dict[str, pathlib.Path]] = None,
     origin_video_ep_pattern: re.Pattern[str] = simple_ep_pattern,
 ) -> None:
-    def _get_video_info() -> Any:
-        cmd = (
-            "ffprobe",
-            "-loglevel",
-            "quiet",
-            "-print_format",
-            "json",
-            "-show_streams",
-            "-select_streams",
-            "s",
-            origin_video,
-        )
-        return json.loads(subprocess.run(cmd).stdout)
+    """
+    1. We first extract all the subtitle tracks from the origin video.
+    2. We then use the sub_lang_by_track_collection to map each sub_track to a subtitle language,
+    which we can use to name the subtitle file.
+    3. We then use the origin_video_collection to generate the command for each sub_track,
+    and then use shlex.join to join the cmd tuple to a string, then print it to the terminal.
+    """
 
-    def _get_sub_stem() -> str:
+    def _get_target_video() -> pathlib.Path:
         if target_video_by_ep_collection:
             m = origin_video_ep_pattern.match(origin_video.stem)
             if m:
-                return target_video_by_ep_collection[m[1]].stem
-        return origin_video.stem
+                return target_video_by_ep_collection[m[1]]
+        return origin_video
 
     def _get_sub_format() -> str:
         codec_name = video_info["streams"][sub_track]["codec_name"]
-        if codec_name == "subrip":
-            return "srt"
-        if codec_name == "ass":
-            return "ass"
-        raise ValueError()
+        return {"subrip": "srt", "ass": "ass"}[codec_name]
 
     pending_subtitle_extraction: list[tuple[str, ...]] = []
     for origin_video in origin_video_collection:
-        video_info = _get_video_info()
+        video_info = get_video_sub_info(origin_video)
+        # TODO: auto sub lang detection and extraction
         for sub_track, sub_lang in sub_lang_by_track_collection.items():
-            sub_name = f"{_get_sub_stem()}.{sub_lang}.{_get_sub_format()}"
+            sub_path = _get_target_video().with_suffix(
+                f".{sub_lang}.{_get_sub_format()}"
+            )
             cmd = (
                 "ffmpeg",
+                "-loglevel",
+                "warning",
                 "-i",  # input
                 str(
                     origin_video
                 ),  # shlex.join only accept str, or we can use pathlike object directly here.
-                "-n",  # no, do not overwrite output files
+                "-n",  # do not overwrite
                 "-codec",
                 "copy",
                 "-map",
-                f":{sub_track}",  # copy only this sub_track from input file
-                sub_name,
+                f"0:s:{sub_track}",  # copy this sub_track from the input file
+                str(sub_path),
             )
             print(shlex.join(cmd))
             pending_subtitle_extraction.append(cmd)
@@ -131,6 +126,7 @@ if __name__ == "__main__":
         "video_directory",
         nargs="?",
         default=pathlib.Path(),
+        type=pathlib.Path,
         help='The directory containing source videos and "subtitle-utils-patterns.json", also the place to put extracted subtitles. (Default: current working directory)',
     )
     cli_args = parser.parse_args()
@@ -138,10 +134,10 @@ if __name__ == "__main__":
     # Read metadata
     metadata: ExtractionMetadata = {
         "origin_video_glob": "*.mkv",
-        "sub_lang_by_track_collection": {1: "ja", 2: "zh-Hans", 3: "zh-Hant", 4: "eng"},
-        "target_video_glob": "*.mp4",
-        "origin_video_ep_pattern": r".*\s(\d{2})\s.*",
-        "target_video_ep_pattern": r".*\s(\d{2})\s.*",
+        "sub_lang_by_track_collection": {0: "eng", 1: "enm"},
+        # "target_video_glob": "*.mp4",
+        # "origin_video_ep_pattern": r".*\s(\d{2})\s.*",
+        # "target_video_ep_pattern": r".*\s(\d{2})\s.*",
     }
 
     # Process
@@ -155,16 +151,11 @@ if __name__ == "__main__":
             "sub_lang_by_track_collection"
         ]
     except KeyError:
-        raise
+        raise  # Explicitly catch and re-raise KeyError to comfort type checkers.
     if "target_video_glob" in metadata:
         target_video_ep_pattern = (
             re.compile(metadata["target_video_ep_pattern"])
             if "target_video_ep_pattern" in metadata
-            else simple_ep_pattern
-        )
-        origin_video_ep_pattern = (
-            re.compile(metadata["origin_video_ep_pattern"])
-            if "origin_video_ep_pattern" in metadata
             else simple_ep_pattern
         )
         extraction_args[
@@ -174,6 +165,11 @@ if __name__ == "__main__":
             target_video_ep_pattern,
             cli_args.video_directory,
         )
-        extraction_args["origin_video_ep_pattern"] = origin_video_collection
+        origin_video_ep_pattern = (
+            re.compile(metadata["origin_video_ep_pattern"])
+            if "origin_video_ep_pattern" in metadata
+            else simple_ep_pattern
+        )
+        extraction_args["origin_video_ep_pattern"] = origin_video_ep_pattern
     extract_subtitles(**extraction_args)
     extract_fonts(origin_video_collection)
